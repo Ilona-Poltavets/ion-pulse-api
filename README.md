@@ -90,6 +90,28 @@ GET /api/articles?language=ru
 GET /api/articles?language=en
 GET /api/articles?featured=true
 GET /api/articles/{slug}
+GET /api/roles
+POST /api/auth/register
+POST /api/auth/login
+GET /api/auth/me
+GET /api/admin/overview
+GET /api/admin/users
+```
+
+## Тестовый администратор
+
+Для локальной разработки в API уже есть тестовый администратор:
+
+```text
+email: admin@halfstack.dev
+password: admin12345
+role: admin
+```
+
+Админские эндпоинты требуют заголовок:
+
+```text
+Authorization: Bearer <token>
 ```
 
 ## Запуск вместе с Vue
