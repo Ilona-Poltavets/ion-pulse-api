@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ion_pulse
+      POSTGRES_USER: ion_pulse
+      POSTGRES_PASSWORD: ion_pulse
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ion_pulse -d ion_pulse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+    volumes:
+      - ion_pulse_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  ion_pulse_postgres_data:
