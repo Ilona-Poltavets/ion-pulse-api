@@ -5,6 +5,7 @@ from alembic import context
 from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+import ion_pulse.models  # noqa: F401
 from ion_pulse.core.config import get_settings
 from ion_pulse.db.base import Base
 
