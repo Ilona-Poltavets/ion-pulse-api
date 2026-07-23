@@ -19,3 +19,7 @@ class AuthenticatedUser(BaseModel):
     email: EmailStr
     display_name: str
     roles: list[str]
+
+
+class ProfileUpdateRequest(BaseModel):
+    display_name: str = Field(min_length=2, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")

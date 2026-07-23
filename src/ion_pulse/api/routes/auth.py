@@ -15,7 +15,12 @@ from ion_pulse.core.security import (
 )
 from ion_pulse.db.session import get_db_session
 from ion_pulse.models.identity import User, UserSession
-from ion_pulse.schemas.auth import AuthenticatedUser, LoginRequest, RegisterRequest
+from ion_pulse.schemas.auth import (
+    AuthenticatedUser,
+    LoginRequest,
+    ProfileUpdateRequest,
+    RegisterRequest,
+)
 
 router = APIRouter(prefix="/auth")
 
@@ -102,11 +107,10 @@ async def login(
     return to_authenticated_user(user)
 
 
-@router.get("/me", response_model=AuthenticatedUser)
-async def get_me(
+async def get_current_user(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-) -> AuthenticatedUser:
+) -> User:
     settings = get_settings()
     token = request.cookies.get(settings.session_cookie_name)
     if token is None:
@@ -122,7 +126,31 @@ async def get_me(
     )
     if user_session is None or not user_session.user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    return to_authenticated_user(user_session.user)
+    return user_session.user
+
+
+@router.get("/me", response_model=AuthenticatedUser)
+async def get_me(user: Annotated[User, Depends(get_current_user)]) -> AuthenticatedUser:
+    return to_authenticated_user(user)
+
+
+@router.patch("/me", response_model=AuthenticatedUser)
+async def update_me(
+    payload: ProfileUpdateRequest,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> AuthenticatedUser:
+    existing_user = await session.scalar(
+        select(User).where(User.display_name == payload.display_name, User.id != user.id)
+    )
+    if existing_user is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Display name already taken",
+        )
+    user.display_name = payload.display_name
+    await session.commit()
+    return to_authenticated_user(user)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
