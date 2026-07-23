@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://ion_pulse:ion_pulse@localhost:5432/ion_pulse"
     cors_origins: list[str] = ["http://localhost:5173"]
+    session_secret: str = "replace-this-local-session-secret"
+    session_cookie_name: str = "ion_pulse_session"
+    session_lifetime_hours: int = 720
+    session_cookie_secure: bool = False
 
 
 @lru_cache

@@ -18,8 +18,8 @@ class User(Base):
         primary_key=True,
         default=uuid4,
     )
-    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
-    display_name: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True)
+    display_name: Mapped[str] = mapped_column(String(80), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
@@ -37,6 +37,10 @@ class User(Base):
         back_populates="users",
         lazy="selectin",
     )
+    sessions: Mapped[list["UserSession"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class Role(Base):
@@ -45,7 +49,7 @@ class Role(Base):
     __tablename__ = "roles"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    code: Mapped[str] = mapped_column(String(50), unique=True)
     name: Mapped[str] = mapped_column(String(100))
 
     users: Mapped[list[User]] = relationship(
@@ -73,3 +77,28 @@ class UserRole(Base):
         DateTime(timezone=True),
         server_default=func.now(),
     )
+
+
+class UserSession(Base):
+    """A revocable server-side session represented by a browser cookie token."""
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    user: Mapped[User] = relationship(back_populates="sessions")

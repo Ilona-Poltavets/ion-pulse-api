@@ -41,8 +41,6 @@ def upgrade() -> None:
         sa.UniqueConstraint("display_name"),
         sa.UniqueConstraint("email"),
     )
-    op.create_index("ix_users_email", "users", ["email"], unique=True)
-    op.create_index("ix_users_display_name", "users", ["display_name"], unique=True)
 
     op.create_table(
         "roles",
@@ -52,7 +50,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("code"),
     )
-    op.create_index("ix_roles_code", "roles", ["code"], unique=True)
 
     op.create_table(
         "user_roles",
@@ -88,8 +85,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("user_roles")
-    op.drop_index("ix_roles_code", table_name="roles")
     op.drop_table("roles")
-    op.drop_index("ix_users_display_name", table_name="users")
-    op.drop_index("ix_users_email", table_name="users")
     op.drop_table("users")

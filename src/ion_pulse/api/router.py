@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
-from ion_pulse.api.routes import health
+from ion_pulse.api.routes import auth, health
 
 api_router = APIRouter()
+api_router.include_router(auth.router, tags=["auth"])
 api_router.include_router(health.router, tags=["system"])
