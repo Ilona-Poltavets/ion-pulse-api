@@ -10,9 +10,32 @@ Backend API for the bilingual Ion Pulse gaming media platform.
 
 ## Local development
 
+### PostgreSQL without Docker
+
+Docker is optional. On Ubuntu/Debian, start the system PostgreSQL cluster and
+create the development account once:
+
+```bash
+sudo pg_ctlcluster 16 main start
+sudo -u postgres createuser --pwprompt ion_pulse
+sudo -u postgres createdb --owner=ion_pulse ion_pulse
+```
+
+Confirm that it is running:
+
+```bash
+pg_isready -h localhost -p 5432 -U ion_pulse
+```
+
+The default `ION_PULSE_DATABASE_URL` in `.env.example` already points to this
+local database. Docker Compose remains an optional isolated development setup.
+
+### Run the API
+
 ```bash
 cp .env.example .env
 uv sync
+uv run alembic upgrade head
 uv run uvicorn ion_pulse.main:app --reload
 ```
 
