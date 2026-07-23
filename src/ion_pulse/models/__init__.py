@@ -1,5 +1,5 @@
 """SQLAlchemy ORM models."""
 
-from ion_pulse.models.identity import Role, User, UserRole, UserSession
+from ion_pulse.models.identity import AuthorApplication, Role, User, UserRole, UserSession
 
-__all__ = ["Role", "User", "UserRole", "UserSession"]
+__all__ = ["AuthorApplication", "Role", "User", "UserRole", "UserSession"]
