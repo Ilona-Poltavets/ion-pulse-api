@@ -15,3 +15,9 @@ class AuthorApplicationRead(BaseModel):
     portfolio_url: HttpUrl | None
     status: str
     created_at: datetime
+    review_note: str | None = None
+
+
+class AuthorApplicationDecision(BaseModel):
+    status: str = Field(pattern="^(approved|rejected)$")
+    review_note: str | None = Field(default=None, max_length=1000)
