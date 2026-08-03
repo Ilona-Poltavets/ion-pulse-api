@@ -107,6 +107,19 @@ Templates for both long-running processes are included in `deploy/`:
 Before installing, replace `/srv/ion-pulse-api`, `/etc/ion-pulse/api.env`, the `ion-pulse`
 user/group, and the `uv` path with values for the target host. The environment file must be
 readable only by the service account and contain the production database URL and secrets.
+For production, the API refuses to start unless debug is disabled, `ION_PULSE_SITE_URL` uses
+HTTPS, `ION_PULSE_SESSION_COOKIE_SECURE=true`, and `ION_PULSE_SESSION_SECRET` is a unique
+value of at least 32 characters. A minimal production section in `/etc/ion-pulse/api.env` is:
+
+```dotenv
+ION_PULSE_ENVIRONMENT=production
+ION_PULSE_DEBUG=false
+ION_PULSE_SITE_URL=https://example.com
+ION_PULSE_CORS_ORIGINS=["https://example.com"]
+ION_PULSE_SESSION_COOKIE_SECURE=true
+ION_PULSE_SESSION_SECRET=replace-with-a-unique-random-value-of-at-least-32-characters
+```
+
 Then install and start both services:
 
 ```bash

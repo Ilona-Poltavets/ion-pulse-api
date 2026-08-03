@@ -1,7 +1,10 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_SESSION_SECRET = "replace-this-local-session-secret"
 
 
 class Settings(BaseSettings):
@@ -19,7 +22,7 @@ class Settings(BaseSettings):
     site_url: str = "http://localhost:5173"
     database_url: str = "postgresql+asyncpg://ion_pulse:ion_pulse@localhost:5432/ion_pulse"
     cors_origins: list[str] = ["http://localhost:5173"]
-    session_secret: str = "replace-this-local-session-secret"
+    session_secret: str = DEFAULT_SESSION_SECRET
     session_cookie_name: str = "ion_pulse_session"
     session_lifetime_hours: int = 720
     session_cookie_secure: bool = False
@@ -45,6 +48,22 @@ class Settings(BaseSettings):
     bootstrap_admin_password: str | None = None
     bootstrap_admin_display_name: str = "admin"
     bootstrap_admin_reset_password: bool = False
+
+    @model_validator(mode="after")
+    def require_secure_production_settings(self) -> "Settings":
+        if self.environment != "production":
+            return self
+        if self.debug:
+            raise ValueError("Production must not enable debug mode")
+        if not self.site_url.startswith("https://"):
+            raise ValueError("Production site URL must use HTTPS")
+        if not self.session_cookie_secure:
+            raise ValueError("Production requires secure session cookies")
+        if self.session_secret == DEFAULT_SESSION_SECRET or len(self.session_secret) < 32:
+            raise ValueError(
+                "Production requires a unique session secret of at least 32 characters"
+            )
+        return self
 
 
 @lru_cache

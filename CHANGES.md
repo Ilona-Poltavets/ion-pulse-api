@@ -24,6 +24,8 @@
   authenticated response.
 - Category seed rollback now preserves categories referenced by publications, so
   a full Alembic reset can complete safely.
+- Production configuration now fails fast when debug mode, an HTTP site URL,
+  insecure session cookies, or a weak/default session secret is used.
 
 - Создан основной документ продукта и план разработки `PROJECT.md`.
 - Создан словарь предметной области `CONTEXT.md`.
