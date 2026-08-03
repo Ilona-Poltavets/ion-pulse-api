@@ -130,6 +130,13 @@ sudo systemctl enable --now ion-pulse-api ion-pulse-worker
 ```
 
 Confirm the deployment through the reverse proxy with `/api/v1/health` and `/api/v1/ready`.
+After each deploy, run the bundled end-to-end smoke check against the public HTTPS origin:
+
+```bash
+deploy/ion-pulse-smoke-check.sh https://example.com
+```
+
+It checks liveness, database readiness, and both RU/EN public-feed routes through the proxy.
 
 ### PostgreSQL backups
 

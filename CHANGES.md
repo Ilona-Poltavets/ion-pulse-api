@@ -15,6 +15,8 @@
   and worker-backed delivery of its saved second-language localization.
 - Added a daily PostgreSQL backup service and timer with dump verification,
   retention, and a documented safe restore drill.
+- Added a public release smoke-check script for liveness, readiness, and RU/EN
+  feed routes through the reverse proxy.
 
 ### Fixed
 
