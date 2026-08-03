@@ -118,6 +118,37 @@ sudo systemctl enable --now ion-pulse-api ion-pulse-worker
 
 Confirm the deployment through the reverse proxy with `/api/v1/health` and `/api/v1/ready`.
 
+### PostgreSQL backups
+
+The `deploy/ion-pulse-backup.service` and `.timer` templates create a verified
+custom-format PostgreSQL dump every day. Add these non-secret settings to
+`/etc/ion-pulse/api.env` and create the backup directory for the service account:
+
+```bash
+ION_PULSE_BACKUP_DIR=/var/backups/ion-pulse
+ION_PULSE_BACKUP_RETENTION_DAYS=14
+sudo install -d -o ion-pulse -g ion-pulse -m 0700 /var/backups/ion-pulse
+sudo install -m 0644 deploy/ion-pulse-backup.service /etc/systemd/system/
+sudo install -m 0644 deploy/ion-pulse-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ion-pulse-backup.timer
+sudo systemctl start ion-pulse-backup.service
+```
+
+The backup service converts the application's async SQLAlchemy URL to the normal
+PostgreSQL URL needed by `pg_dump`, verifies every new dump with `pg_restore --list`,
+and only then publishes it under the timestamped filename. Keep the backup directory
+outside the deployment directory and copy its encrypted contents to independent storage.
+
+Test restores regularly on a **new disposable database**, never the production one:
+
+```bash
+createdb ion_pulse_restore_test
+pg_restore --clean --if-exists --no-owner --dbname=ion_pulse_restore_test \
+  /var/backups/ion-pulse/ion-pulse-YYYYMMDDTHHMMSSZ.dump
+dropdb ion_pulse_restore_test
+```
+
 ## Checks
 
 ```bash

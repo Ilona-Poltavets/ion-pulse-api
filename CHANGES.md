@@ -11,6 +11,8 @@
   an explicitly configured bootstrap administrator.
 - Added PostgreSQL integration coverage in CI for author approval and the public
   editorial path from a member draft to a published material.
+- Added a daily PostgreSQL backup service and timer with dump verification,
+  retention, and a documented safe restore drill.
 
 ### Fixed
 
