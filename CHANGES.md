@@ -9,6 +9,8 @@
 
 - Added an idempotent baseline seed command for roles, localized categories, and
   an explicitly configured bootstrap administrator.
+- Added PostgreSQL integration coverage in CI for author approval and the public
+  editorial path from a member draft to a published material.
 
 ### Fixed
 
@@ -16,6 +18,10 @@
   created with a 32-character revision field can apply all current migrations.
 - The baseline seeder can now explicitly reset an existing bootstrap administrator
   password while continuing to store it only as an Argon2 hash.
+- Registration now explicitly loads a new member's roles before returning the
+  authenticated response.
+- Category seed rollback now preserves categories referenced by publications, so
+  a full Alembic reset can complete safely.
 
 - Создан основной документ продукта и план разработки `PROJECT.md`.
 - Создан словарь предметной области `CONTEXT.md`.
