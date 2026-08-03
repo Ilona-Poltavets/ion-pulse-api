@@ -10,6 +10,7 @@ from ion_pulse.db.session import async_session_factory
 from ion_pulse.domain.roles import RoleCode
 from ion_pulse.main import app
 from ion_pulse.models.identity import Role, User, UserRole, UserRoleAudit
+from ion_pulse.services.translations import TranslatedContent, process_next_translation_job
 
 pytestmark = pytest.mark.integration
 
@@ -45,6 +46,26 @@ async def remove_test_users(emails: list[str]) -> None:
         )
         await session.execute(delete(User).where(User.email.in_(emails)))
         await session.commit()
+
+
+class StaticTranslator:
+    async def translate(
+        self,
+        *,
+        title: str,
+        summary: str,
+        body: str,
+        source_locale: str,
+        target_locale: str,
+    ) -> TranslatedContent:
+        assert source_locale == "en"
+        assert target_locale == "ru"
+        assert title == "A focused look at game design"
+        return TranslatedContent(
+            title="Внимательный взгляд на игровой дизайн",
+            summary="Translated summary for readers.",
+            body="Translated body for readers with the same editorial context.",
+        )
 
 
 @pytest.mark.asyncio
@@ -193,6 +214,97 @@ async def test_member_material_is_published_after_editorial_decision() -> None:
             assert published.status_code == 200
             assert published.json()["title"] == "A focused look at game design"
             assert published.json()["author_name"] == f"member_{suffix[:12]}"
+    finally:
+        # Editorial decisions are immutable by design. The CI PostgreSQL service is
+        # discarded after this test, so the audit trail remains intact during it.
+        pass
+
+
+@pytest.mark.asyncio
+async def test_reader_gets_ready_translation_after_worker_processes_published_material() -> None:
+    require_integration_database()
+    suffix = uuid4().hex
+    member_email = f"member-{suffix}@example.com"
+    editor_email = f"editor-{suffix}@example.com"
+    password = "Integration-pass-2026!"
+    await create_user_with_role(editor_email, password, RoleCode.EDITOR)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as member_client:
+            register = await member_client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": member_email,
+                    "display_name": f"member_{suffix[:12]}",
+                    "password": password,
+                },
+            )
+            assert register.status_code == 201
+
+            draft = await member_client.post(
+                "/api/v1/publications/drafts",
+                json={
+                    "category_slug": "news",
+                    "source_locale": "en",
+                    "title": "A focused look at game design",
+                    "summary": (
+                        "A practical editorial note about the small choices that make "
+                        "games memorable."
+                    ),
+                    "body": (
+                        "Good game criticism helps readers understand what a design "
+                        "choice achieves and where that choice may not serve every player."
+                    ),
+                },
+            )
+            assert draft.status_code == 201
+            publication_id = draft.json()["id"]
+
+            submitted = await member_client.post(f"/api/v1/publications/{publication_id}/submit")
+            assert submitted.status_code == 200
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as editor_client:
+            login = await editor_client.post(
+                "/api/v1/auth/login", json={"email": editor_email, "password": password}
+            )
+            assert login.status_code == 200
+
+            decision = await editor_client.post(
+                f"/api/v1/publications/{publication_id}/editorial-decision",
+                json={"decision": "publish", "note": "Ready for readers."},
+            )
+            assert decision.status_code == 200
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as reader_client:
+            fallback = await reader_client.get(
+                f"/api/v1/publications/published/{publication_id}?locale=ru"
+            )
+            assert fallback.status_code == 200
+            assert fallback.json()["locale"] == "en"
+            assert fallback.json()["translation_available"] is False
+
+        async with async_session_factory() as session:
+            assert await process_next_translation_job(session, StaticTranslator())
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as reader_client:
+            translated = await reader_client.get(
+                f"/api/v1/publications/published/{publication_id}?locale=ru"
+            )
+            assert translated.status_code == 200
+            assert translated.json()["locale"] == "ru"
+            assert translated.json()["translation_available"] is True
+            assert translated.json()["title"] == "Внимательный взгляд на игровой дизайн"
     finally:
         # Editorial decisions are immutable by design. The CI PostgreSQL service is
         # discarded after this test, so the audit trail remains intact during it.
