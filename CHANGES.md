@@ -13,6 +13,8 @@
   editorial path from a member draft to a published material.
 - Added PostgreSQL integration coverage for fallback to an original publication
   and worker-backed delivery of its saved second-language localization.
+- Added PostgreSQL integration coverage for a community report, moderator
+  decision, and hiding the reported comment from public readers.
 - Added a daily PostgreSQL backup service and timer with dump verification,
   retention, and a documented safe restore drill.
 - Added a public release smoke-check script for liveness, readiness, and RU/EN
@@ -22,6 +24,8 @@
 
 - PostgreSQL integration scenarios now share one event loop and drain the
   translation queue, making them independent of connection-pool and test order.
+- Creating or reviewing a content report now returns its target context without
+  serializing context fields twice.
 - Expanded Alembic's legacy version column during migration `0007` so databases
   created with a 32-character revision field can apply all current migrations.
 - The baseline seeder can now explicitly reset an existing bootstrap administrator

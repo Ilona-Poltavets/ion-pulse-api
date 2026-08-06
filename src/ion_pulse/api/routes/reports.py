@@ -43,7 +43,9 @@ async def to_report(report: ContentReport, session: AsyncSession) -> ContentRepo
             target_author_id = comment.author_id
             target_excerpt = comment.body[:240]
     return ContentReportRead(
-        **ContentReportRead.model_validate(report, from_attributes=True).model_dump(),
+        **ContentReportRead.model_validate(report, from_attributes=True).model_dump(
+            exclude={"target_author_id", "target_excerpt"}
+        ),
         target_author_id=target_author_id,
         target_excerpt=target_excerpt,
     )

@@ -311,3 +311,146 @@ async def test_reader_gets_ready_translation_after_worker_processes_published_ma
         # Editorial decisions are immutable by design. The CI PostgreSQL service is
         # discarded after this test, so the audit trail remains intact during it.
         pass
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_moderator_resolves_a_comment_report_and_hides_the_comment() -> None:
+    require_integration_database()
+    suffix = uuid4().hex
+    member_email = f"member-{suffix}@example.com"
+    reporter_email = f"reporter-{suffix}@example.com"
+    editor_email = f"editor-{suffix}@example.com"
+    moderator_email = f"moderator-{suffix}@example.com"
+    password = "Integration-pass-2026!"
+    await create_user_with_role(editor_email, password, RoleCode.EDITOR)
+    await create_user_with_role(moderator_email, password, RoleCode.MODERATOR)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as member_client:
+            register = await member_client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": member_email,
+                    "display_name": f"member_{suffix[:12]}",
+                    "password": password,
+                },
+            )
+            assert register.status_code == 201
+
+            draft = await member_client.post(
+                "/api/v1/publications/drafts",
+                json={
+                    "category_slug": "news",
+                    "source_locale": "en",
+                    "title": "Moderation keeps conversations useful",
+                    "summary": "A short note on clear and safe community discussions.",
+                    "body": (
+                        "Thoughtful moderation protects readers and lets useful discussion "
+                        "stay visible."
+                    ),
+                },
+            )
+            assert draft.status_code == 201
+            publication_id = draft.json()["id"]
+            assert (
+                await member_client.post(f"/api/v1/publications/{publication_id}/submit")
+            ).status_code == 200
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as editor_client:
+            assert (
+                await editor_client.post(
+                    "/api/v1/auth/login",
+                    json={"email": editor_email, "password": password},
+                )
+            ).status_code == 200
+            decision = await editor_client.post(
+                f"/api/v1/publications/{publication_id}/editorial-decision",
+                json={"decision": "publish", "note": "Ready for readers."},
+            )
+            assert decision.status_code == 200
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as member_client:
+            assert (
+                await member_client.post(
+                    "/api/v1/auth/login",
+                    json={"email": member_email, "password": password},
+                )
+            ).status_code == 200
+            comment = await member_client.post(
+                f"/api/v1/publications/{publication_id}/comments",
+                json={"body": "This discussion should not be visible to readers."},
+            )
+            assert comment.status_code == 201
+            comment_id = comment.json()["id"]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as reporter_client:
+            assert (
+                await reporter_client.post(
+                    "/api/v1/auth/register",
+                    json={
+                        "email": reporter_email,
+                        "display_name": f"reporter_{suffix[:12]}",
+                        "password": password,
+                    },
+                )
+            ).status_code == 201
+            report = await reporter_client.post(
+                f"/api/v1/comments/{comment_id}/reports",
+                json={"reason": "This comment needs a moderation review before it is shown."},
+            )
+            assert report.status_code == 201
+            report_id = report.json()["id"]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as moderator_client:
+            assert (
+                await moderator_client.post(
+                    "/api/v1/auth/login",
+                    json={"email": moderator_email, "password": password},
+                )
+            ).status_code == 200
+            queue = await moderator_client.get("/api/v1/reports")
+            assert queue.status_code == 200
+            queued_report = next(item for item in queue.json() if item["id"] == report_id)
+            assert (
+                queued_report["target_excerpt"]
+                == "This discussion should not be visible to readers."
+            )
+
+            resolved = await moderator_client.patch(
+                f"/api/v1/reports/{report_id}",
+                json={"status": "resolved", "review_note": "Comment hidden after review."},
+            )
+            assert resolved.status_code == 200
+            hidden = await moderator_client.patch(
+                f"/api/v1/publications/comments/{comment_id}/visibility",
+                json={"is_hidden": True},
+            )
+            assert hidden.status_code == 200
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as reader_client:
+            visible_comments = await reader_client.get(
+                f"/api/v1/publications/{publication_id}/comments"
+            )
+            assert visible_comments.status_code == 200
+            assert visible_comments.json() == []
+    finally:
+        # Report decisions and moderation actions are immutable audit records.
+        # CI discards its database after the integration job.
+        pass
