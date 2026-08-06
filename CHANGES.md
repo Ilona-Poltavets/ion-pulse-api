@@ -15,6 +15,8 @@
   and worker-backed delivery of its saved second-language localization.
 - Added PostgreSQL integration coverage for a community report, moderator
   decision, and hiding the reported comment from public readers.
+- Added PostgreSQL integration coverage for password recovery, including
+  one-time reset links and revoking pre-reset sessions.
 - Added a daily PostgreSQL backup service and timer with dump verification,
   retention, and a documented safe restore drill.
 - Added a public release smoke-check script for liveness, readiness, and RU/EN

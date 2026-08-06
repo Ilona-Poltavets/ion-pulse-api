@@ -1,4 +1,5 @@
 import os
+from collections.abc import Generator
 from uuid import uuid4
 
 import pytest
@@ -10,9 +11,17 @@ from ion_pulse.db.session import async_session_factory
 from ion_pulse.domain.roles import RoleCode
 from ion_pulse.main import app
 from ion_pulse.models.identity import Role, User, UserRole, UserRoleAudit
+from ion_pulse.services.rate_limits import reset_rate_limits
 from ion_pulse.services.translations import TranslatedContent, process_next_translation_job
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+def reset_process_local_rate_limits() -> Generator[None, None, None]:
+    reset_rate_limits()
+    yield
+    reset_rate_limits()
 
 
 def require_integration_database() -> None:
@@ -454,3 +463,74 @@ async def test_moderator_resolves_a_comment_report_and_hides_the_comment() -> No
         # Report decisions and moderation actions are immutable audit records.
         # CI discards its database after the integration job.
         pass
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_password_reset_revokes_old_sessions_and_accepts_only_one_new_password(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    require_integration_database()
+    suffix = uuid4().hex
+    email = f"reset-{suffix}@example.com"
+    old_password = "Integration-pass-2026!"
+    new_password = "A-new-integration-pass-2026!"
+    delivered_tokens: list[str] = []
+
+    async def capture_delivery(_email: str, token: str) -> None:
+        delivered_tokens.append(token)
+
+    monkeypatch.setattr("ion_pulse.api.routes.auth.deliver_password_reset", capture_delivery)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as existing_session_client:
+            register = await existing_session_client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": email,
+                    "display_name": f"reset_{suffix[:12]}",
+                    "password": old_password,
+                },
+            )
+            assert register.status_code == 201
+            assert (await existing_session_client.get("/api/v1/auth/me")).status_code == 200
+
+            reset_request = await existing_session_client.post(
+                "/api/v1/auth/password-reset-requests",
+                json={"email": email},
+            )
+            assert reset_request.status_code == 204
+            assert len(delivered_tokens) == 1
+
+            reset = await existing_session_client.post(
+                "/api/v1/auth/password-resets",
+                json={"token": delivered_tokens[0], "password": new_password},
+            )
+            assert reset.status_code == 204
+            assert (await existing_session_client.get("/api/v1/auth/me")).status_code == 401
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as login_client:
+            assert (
+                await login_client.post(
+                    "/api/v1/auth/login",
+                    json={"email": email, "password": old_password},
+                )
+            ).status_code == 401
+            assert (
+                await login_client.post(
+                    "/api/v1/auth/login",
+                    json={"email": email, "password": new_password},
+                )
+            ).status_code == 200
+            assert (
+                await login_client.post(
+                    "/api/v1/auth/password-resets",
+                    json={"token": delivered_tokens[0], "password": old_password},
+                )
+            ).status_code == 400
+    finally:
+        await remove_test_users([email])
