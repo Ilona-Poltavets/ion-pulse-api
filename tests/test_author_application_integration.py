@@ -60,7 +60,6 @@ class StaticTranslator:
     ) -> TranslatedContent:
         assert source_locale == "en"
         assert target_locale == "ru"
-        assert title == "A focused look at game design"
         return TranslatedContent(
             title="Внимательный взгляд на игровой дизайн",
             summary="Translated summary for readers.",
@@ -68,7 +67,7 @@ class StaticTranslator:
         )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="module")
 async def test_member_becomes_author_after_administrator_approves_application() -> None:
     require_integration_database()
     suffix = uuid4().hex
@@ -137,7 +136,7 @@ async def test_member_becomes_author_after_administrator_approves_application() 
         await remove_test_users([member_email, administrator_email])
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="module")
 async def test_member_material_is_published_after_editorial_decision() -> None:
     require_integration_database()
     suffix = uuid4().hex
@@ -220,7 +219,7 @@ async def test_member_material_is_published_after_editorial_decision() -> None:
         pass
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="module")
 async def test_reader_gets_ready_translation_after_worker_processes_published_material() -> None:
     require_integration_database()
     suffix = uuid4().hex
@@ -292,7 +291,10 @@ async def test_reader_gets_ready_translation_after_worker_processes_published_ma
             assert fallback.json()["translation_available"] is False
 
         async with async_session_factory() as session:
-            assert await process_next_translation_job(session, StaticTranslator())
+            processed_jobs = 0
+            while await process_next_translation_job(session, StaticTranslator()):
+                processed_jobs += 1
+            assert processed_jobs > 0
 
         async with AsyncClient(
             transport=ASGITransport(app=app),

@@ -20,6 +20,8 @@
 
 ### Fixed
 
+- PostgreSQL integration scenarios now share one event loop and drain the
+  translation queue, making them independent of connection-pool and test order.
 - Expanded Alembic's legacy version column during migration `0007` so databases
   created with a 32-character revision field can apply all current migrations.
 - The baseline seeder can now explicitly reset an existing bootstrap administrator
