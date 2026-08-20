@@ -146,6 +146,8 @@ deploy/ion-pulse-smoke-check.sh https://example.com
 ```
 
 It checks liveness, database readiness, and both RU/EN public-feed routes through the proxy.
+For the full ordered host-side release and rollback procedure, see
+[`deploy/RELEASE.md`](deploy/RELEASE.md).
 
 ### PostgreSQL backups
 

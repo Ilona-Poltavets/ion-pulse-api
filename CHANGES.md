@@ -27,6 +27,8 @@
   feed routes through the reverse proxy.
 - Added a production pre-flight script that validates the protected environment
   file and checks the target database for pending Alembic migrations.
+- Added a host-side release checklist covering migration, same-origin web build,
+  service restart, backup verification, public smoke check, and rollback.
 
 ### Fixed
 
