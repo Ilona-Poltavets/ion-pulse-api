@@ -129,6 +129,15 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now ion-pulse-api ion-pulse-worker
 ```
 
+Before each release, run the pre-flight from the checked-out API directory. It
+loads the same protected systemd environment file without printing secrets,
+validates all production-only security settings, and fails if the database has
+pending Alembic migrations:
+
+```bash
+deploy/ion-pulse-preflight.sh /etc/ion-pulse/api.env
+```
+
 Confirm the deployment through the reverse proxy with `/api/v1/health` and `/api/v1/ready`.
 After each deploy, run the bundled end-to-end smoke check against the public HTTPS origin:
 
