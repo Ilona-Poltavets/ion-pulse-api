@@ -613,3 +613,59 @@ async def test_worker_publishes_a_due_scheduled_material() -> None:
         # The scheduled publication's audit and translation records are immutable.
         # CI discards its database after the integration job.
         pass
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_content_manager_updates_a_localized_public_category() -> None:
+    require_integration_database()
+    suffix = uuid4().hex
+    manager_email = f"content-manager-{suffix}@example.com"
+    password = "Integration-pass-2026!"
+    await create_user_with_role(manager_email, password, RoleCode.CONTENT_MANAGER)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as guest:
+            assert (await guest.get("/api/v1/categories/manage")).status_code == 401
+            before = await guest.get("/api/v1/categories?locale=en")
+            assert before.status_code == 200
+            assert next(item for item in before.json() if item["slug"] == "news")["name"] != (
+                "Release notes"
+            )
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as manager:
+            assert (
+                await manager.post(
+                    "/api/v1/auth/login",
+                    json={"email": manager_email, "password": password},
+                )
+            ).status_code == 200
+            update = await manager.patch(
+                "/api/v1/categories/news",
+                json={
+                    "name_ru": "Новости релиза",
+                    "name_en": "Release notes",
+                    "description_ru": "Проверяемая публичная категория для русских читателей.",
+                    "description_en": "A verified public category for English readers.",
+                    "color": "#49C7FF",
+                    "sort_order": 3,
+                    "is_visible": True,
+                },
+            )
+            assert update.status_code == 200
+            assert update.json()["name_en"] == "Release notes"
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as guest:
+            english = await guest.get("/api/v1/categories?locale=en")
+            russian = await guest.get("/api/v1/categories?locale=ru")
+            assert english.status_code == russian.status_code == 200
+            assert next(item for item in english.json() if item["slug"] == "news") == {
+                "slug": "news",
+                "name": "Release notes",
+                "description": "A verified public category for English readers.",
+                "color": "#49C7FF",
+                "sort_order": 3,
+            }
+            assert next(item for item in russian.json() if item["slug"] == "news")["name"] == (
+                "Новости релиза"
+            )
+    finally:
+        await remove_test_users([manager_email])
