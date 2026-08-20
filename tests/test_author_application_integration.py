@@ -1,5 +1,6 @@
 import os
 from collections.abc import Generator
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -11,7 +12,9 @@ from ion_pulse.db.session import async_session_factory
 from ion_pulse.domain.roles import RoleCode
 from ion_pulse.main import app
 from ion_pulse.models.identity import Role, User, UserRole, UserRoleAudit
+from ion_pulse.models.publications import Publication
 from ion_pulse.services.rate_limits import reset_rate_limits
+from ion_pulse.services.scheduling import publish_due_publications
 from ion_pulse.services.translations import TranslatedContent, process_next_translation_job
 
 pytestmark = pytest.mark.integration
@@ -534,3 +537,79 @@ async def test_password_reset_revokes_old_sessions_and_accepts_only_one_new_pass
             ).status_code == 400
     finally:
         await remove_test_users([email])
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_worker_publishes_a_due_scheduled_material() -> None:
+    require_integration_database()
+    suffix = uuid4().hex
+    member_email = f"member-{suffix}@example.com"
+    editor_email = f"editor-{suffix}@example.com"
+    password = "Integration-pass-2026!"
+    await create_user_with_role(editor_email, password, RoleCode.EDITOR)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as member:
+            assert (
+                await member.post(
+                    "/api/v1/auth/register",
+                    json={
+                        "email": member_email,
+                        "display_name": f"member_{suffix[:12]}",
+                        "password": password,
+                    },
+                )
+            ).status_code == 201
+            draft = await member.post(
+                "/api/v1/publications/drafts",
+                json={
+                    "category_slug": "news",
+                    "source_locale": "en",
+                    "title": "Scheduled reporting reaches readers on time",
+                    "summary": "A material prepared for automatic publication by the worker.",
+                    "body": (
+                        "The editorial calendar should publish a reviewed material when its "
+                        "planned time arrives."
+                    ),
+                },
+            )
+            assert draft.status_code == 201
+            publication_id = draft.json()["id"]
+            assert (
+                await member.post(f"/api/v1/publications/{publication_id}/submit")
+            ).status_code == 200
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as editor:
+            assert (
+                await editor.post(
+                    "/api/v1/auth/login",
+                    json={"email": editor_email, "password": password},
+                )
+            ).status_code == 200
+            scheduled = await editor.post(
+                f"/api/v1/publications/{publication_id}/editorial-decision",
+                json={
+                    "decision": "schedule",
+                    "note": "Ready for the editorial calendar.",
+                    "scheduled_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+                },
+            )
+            assert scheduled.status_code == 200
+            assert scheduled.json()["status"] == "scheduled"
+
+        async with async_session_factory() as session:
+            publication = await session.get(Publication, publication_id, with_for_update=True)
+            assert publication is not None
+            publication.scheduled_at = datetime.now(UTC) - timedelta(seconds=1)
+            await session.commit()
+            assert await publish_due_publications(session) == 1
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as reader:
+            published = await reader.get(
+                f"/api/v1/publications/published/{publication_id}?locale=en"
+            )
+            assert published.status_code == 200
+            assert published.json()["title"] == "Scheduled reporting reaches readers on time"
+    finally:
+        # The scheduled publication's audit and translation records are immutable.
+        # CI discards its database after the integration job.
+        pass

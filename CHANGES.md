@@ -17,6 +17,8 @@
   decision, and hiding the reported comment from public readers.
 - Added PostgreSQL integration coverage for password recovery, including
   one-time reset links and revoking pre-reset sessions.
+- Added PostgreSQL integration coverage for scheduled publication: an editor
+  plans a material, the worker publishes it when due, and readers can open it.
 - Added a daily PostgreSQL backup service and timer with dump verification,
   retention, and a documented safe restore drill.
 - Added a public release smoke-check script for liveness, readiness, and RU/EN
