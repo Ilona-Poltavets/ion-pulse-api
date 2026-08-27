@@ -16,7 +16,13 @@ from ion_pulse.core.security import hash_password
 from ion_pulse.db.session import async_session_factory, engine
 from ion_pulse.domain.roles import RoleCode
 from ion_pulse.models.identity import Role, User, UserRole
-from ion_pulse.models.publications import Category, Publication, PublicationLocalization
+from ion_pulse.models.publications import (
+    Category,
+    JournalIssue,
+    JournalIssuePublication,
+    Publication,
+    PublicationLocalization,
+)
 
 BASE_CATEGORIES = (
     (
@@ -62,11 +68,16 @@ BASE_CATEGORIES = (
 DEMO_PASSWORD = "IonPulseDemo2026!"
 DEMO_USERS = (
     ("admin@ion-pulse.local", "Ion Admin", (RoleCode.ADMINISTRATOR,)),
+    ("content@ion-pulse.local", "Casey Content", (RoleCode.CONTENT_MANAGER,)),
     ("editor@ion-pulse.local", "Maya Editor", (RoleCode.EDITOR,)),
     ("author@ion-pulse.local", "Alex North", (RoleCode.AUTHOR,)),
     ("moderator@ion-pulse.local", "Sam Guard", (RoleCode.MODERATOR,)),
     ("player@ion-pulse.local", "Jamie Player", ()),
 )
+
+DEMO_JOURNAL_PERIOD_START = datetime(2026, 7, 1, tzinfo=UTC)
+DEMO_JOURNAL_PERIOD_END = datetime(2026, 7, 31, 23, 59, 59, tzinfo=UTC)
+DEMO_JOURNAL_TITLE = "ISSUE 00 — JULY 2026"
 DEMO_PUBLICATIONS = (
     (
         "reviews",
@@ -200,6 +211,7 @@ async def seed() -> None:
         categories = {
             category.slug: category for category in (await session.scalars(select(Category))).all()
         }
+        categories_by_id = {category.id: category for category in categories.values()}
         users = {user.email: user for user in (await session.scalars(select(User))).all()}
         for index, item in enumerate(DEMO_PUBLICATIONS):
             (
@@ -258,6 +270,62 @@ async def seed() -> None:
                     ),
                 )
             )
+
+        await session.flush()
+        issue = await session.scalar(
+            select(JournalIssue).where(
+                JournalIssue.period_start == DEMO_JOURNAL_PERIOD_START,
+                JournalIssue.period_end == DEMO_JOURNAL_PERIOD_END,
+            )
+        )
+        if issue is None:
+            issue = JournalIssue(
+                editor_id=users["editor@ion-pulse.local"].id,
+                title=DEMO_JOURNAL_TITLE,
+                period_start=DEMO_JOURNAL_PERIOD_START,
+                period_end=DEMO_JOURNAL_PERIOD_END,
+                status="published",
+                published_at=datetime(2026, 8, 1, 9, tzinfo=UTC),
+            )
+            session.add(issue)
+            await session.flush()
+            materials = (
+                await session.scalars(
+                    select(Publication)
+                    .where(Publication.status == "published")
+                    .order_by(Publication.published_at.desc())
+                    .limit(5)
+                )
+            ).all()
+            for position, publication in enumerate(materials, 1):
+                category = categories_by_id[publication.category_id]
+                localizations = (
+                    await session.scalars(
+                        select(PublicationLocalization).where(
+                            PublicationLocalization.publication_id == publication.id,
+                            PublicationLocalization.translation_status == "ready",
+                        )
+                    )
+                ).all()
+                session.add(
+                    JournalIssuePublication(
+                        issue_id=issue.id,
+                        publication_id=publication.id,
+                        position=position,
+                        snapshot={
+                            "category_slug": category.slug,
+                            "source_locale": publication.source_locale,
+                            "localizations": {
+                                localization.locale: {
+                                    "title": localization.title,
+                                    "summary": localization.summary,
+                                    "body": localization.body,
+                                }
+                                for localization in localizations
+                            },
+                        },
+                    )
+                )
         await session.commit()
 
 
