@@ -56,6 +56,13 @@ def test_cover_supports_free_layout_without_publication() -> None:
     assert page.image_position == "background"
 
 
+@pytest.mark.parametrize("template", ["title", "finale"])
+def test_standalone_editorial_pages_do_not_require_publication(template: str) -> None:
+    page = JournalPage(template=template, heading="Ion Pulse", text="Специальный выпуск")
+
+    assert page.publication_ids == []
+
+
 @pytest.mark.asyncio
 async def test_save_rejects_article_outside_month_without_writing():
     editor_id = uuid4()
