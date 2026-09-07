@@ -23,6 +23,16 @@ def test_hidden_comments_remain_available_for_moderator_restoration() -> None:
     assert "is_hidden" in comments.c
 
 
+def test_comment_media_columns_belong_to_comments() -> None:
+    comments = Base.metadata.tables["publication_comments"]
+    localizations = Base.metadata.tables["publication_localizations"]
+
+    assert "media_kind" in comments.c
+    assert "media_value" in comments.c
+    assert "media_kind" not in localizations.c
+    assert "media_value" not in localizations.c
+
+
 def test_journal_materials_keep_a_published_snapshot() -> None:
     materials = Base.metadata.tables["journal_issue_publications"]
     assert "snapshot" in materials.c
