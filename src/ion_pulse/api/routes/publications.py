@@ -156,6 +156,17 @@ def to_published(
     )
 
 
+def journal_candidate_period(month: str | None, now: datetime) -> tuple[datetime, datetime]:
+    selected_month_start = (
+        datetime.strptime(month, "%Y-%m").replace(tzinfo=UTC)
+        if month
+        else now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    )
+    previous_month_start = (selected_month_start - timedelta(days=1)).replace(day=1)
+    next_month_start = (selected_month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return previous_month_start, next_month_start
+
+
 @router.get("/journal-candidates", response_model=list[JournalCandidateRead])
 async def list_journal_candidates(
     session: Annotated[AsyncSession, Depends(get_db_session)],
@@ -170,12 +181,7 @@ async def list_journal_candidates(
         )
     now = datetime.now(UTC)
     try:
-        week_start = (
-            datetime.strptime(month, "%Y-%m").replace(tzinfo=UTC)
-            if month
-            else now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        )
-        week_end = (week_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+        period_start, period_end = journal_candidate_period(month, now)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid month") from exc
     source = aliased(PublicationLocalization)
@@ -233,13 +239,11 @@ async def list_journal_candidates(
     )
     rows = await session.execute(
         candidate_query.where(
-            Publication.published_at >= week_start,
-            Publication.published_at < week_end,
+            Publication.published_at >= period_start,
+            Publication.published_at < period_end,
         )
     )
     row_items = rows.all()
-    if month and not row_items:
-        row_items = (await session.execute(candidate_query.limit(50))).all()
     return [
         JournalCandidateRead(
             id=publication.id,
