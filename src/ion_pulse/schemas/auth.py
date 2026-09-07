@@ -1,6 +1,23 @@
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ValidatorFunctionWrapHandler, WrapValidator
+
+from ion_pulse.core.config import get_settings
+
+
+def validate_account_email(value: object, handler: ValidatorFunctionWrapHandler) -> str:
+    # The seed uses reserved addresses that EmailStr intentionally rejects.
+    # Keep the exception confined to known demo identities outside deployed environments.
+    if isinstance(value, str) and get_settings().environment in {"local", "test"}:
+        normalized = value.strip().lower()
+        demo_names = {"admin", "editor", "content", "author", "moderator", "player"}
+        if normalized in {f"{name}@ion-pulse.local" for name in demo_names}:
+            return normalized
+    return str(handler(value))
+
+
+AccountEmail = Annotated[EmailStr, WrapValidator(validate_account_email)]
 
 
 class RegisterRequest(BaseModel):
@@ -10,7 +27,7 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: AccountEmail
     password: str = Field(min_length=1, max_length=128)
 
 
@@ -25,7 +42,7 @@ class PasswordResetConfirm(BaseModel):
 
 class AuthenticatedUser(BaseModel):
     id: UUID
-    email: EmailStr
+    email: AccountEmail
     display_name: str
     roles: list[str]
 

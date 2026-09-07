@@ -3,7 +3,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -106,7 +106,10 @@ def require_digest_access(user: User) -> None:
 
 
 def require_journal_access(user: User) -> None:
-    require_digest_access(user)
+    if not {RoleCode.EDITOR.value, RoleCode.ADMINISTRATOR.value}.intersection(
+        role.code for role in user.roles
+    ):
+        raise HTTPException(status_code=403, detail="Editor or administrator required")
 
 
 def require_content_type_access(content_type: str, user: User) -> None:
@@ -158,14 +161,23 @@ async def list_journal_candidates(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     user: Annotated[User, Depends(get_current_user)],
     locale: str = "ru",
+    month: Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = None,
 ) -> list[JournalCandidateRead]:
     require_journal_access(user)
     if locale not in {"ru", "en"}:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unsupported locale"
         )
-    week_end = datetime.now(UTC)
-    week_start = week_end - timedelta(days=7)
+    now = datetime.now(UTC)
+    try:
+        week_start = (
+            datetime.strptime(month, "%Y-%m").replace(tzinfo=UTC)
+            if month
+            else now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        )
+        week_end = (week_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid month") from exc
     source = aliased(PublicationLocalization)
     requested = aliased(PublicationLocalization)
     rating = (
@@ -211,6 +223,7 @@ async def list_journal_candidates(
         .where(
             Publication.status == PublicationStatus.PUBLISHED.value,
             Publication.published_at >= week_start,
+            Publication.published_at < week_end,
             Publication.content_type != "digest",
         )
         .order_by(
@@ -219,7 +232,6 @@ async def list_journal_candidates(
                 + func.coalesce(comments.c.comment_count, 0) * 0.1
             ).desc()
         )
-        .limit(50)
     )
     return [
         JournalCandidateRead(
@@ -227,10 +239,14 @@ async def list_journal_candidates(
             category_slug=category.slug,
             title=(localized or original).title,
             summary=(localized or original).summary,
+            body=(localized or original).body,
+            view_count=publication.view_count,
             published_at=publication.published_at,
             average_rating=float(average_rating or 0),
             comment_count=int(comment_count or 0),
-            score=float(average_rating or 0) + int(comment_count or 0) * 0.1,
+            score=float(average_rating or 0)
+            + int(comment_count or 0) * 2
+            + publication.view_count * 0.01,
         )
         for publication, category, original, localized, average_rating, comment_count in rows
         if publication.published_at is not None
@@ -659,6 +675,12 @@ async def get_published_publication(
             status_code=status.HTTP_404_NOT_FOUND, detail="Published publication not found"
         )
     publication, localization, category, author = result
+    await session.execute(
+        update(Publication)
+        .where(Publication.id == publication.id)
+        .values(view_count=Publication.view_count + 1)
+    )
+    await session.commit()
     return to_published(publication, localization, category, author, locale)
 
 

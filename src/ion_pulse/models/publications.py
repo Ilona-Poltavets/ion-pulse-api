@@ -66,6 +66,7 @@ class Publication(Base):
         PostgreSQLUUID(as_uuid=True), ForeignKey("games.id", ondelete="SET NULL"), nullable=True
     )
     content_type: Mapped[str] = mapped_column(String(20), server_default="article")
+    view_count: Mapped[int] = mapped_column(default=0, server_default="0")
     review_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     source_locale: Mapped[str] = mapped_column(String(5))
     status: Mapped[str] = mapped_column(String(30), server_default="draft")
@@ -153,6 +154,7 @@ class JournalIssue(Base):
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     title: Mapped[str] = mapped_column(String(240))
+    pages: Mapped[list[dict[str, object]]] = mapped_column(JSON, default=list, server_default="[]")
     status: Mapped[str] = mapped_column(String(20), server_default="draft")
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

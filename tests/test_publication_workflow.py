@@ -71,6 +71,8 @@ async def test_published_publication_with_ready_requested_locale_includes_author
     async def execute(statement: object) -> Mock:
         # Mirror SQLAlchemy's result shape for exactly the entities selected by
         # the endpoint. The old query selected only three entities.
+        if not hasattr(statement, "column_descriptions"):
+            return Mock()
         selected = len(statement.column_descriptions)  # type: ignore[attr-defined]
         row = Mock()
         row.one_or_none.return_value = (publication, localization, category, author)[:selected]

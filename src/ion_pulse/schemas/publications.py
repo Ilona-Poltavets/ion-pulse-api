@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, Field, model_validator
@@ -122,14 +123,26 @@ class DigestItemRead(BaseModel):
 
 
 class JournalCandidateRead(DigestItemRead):
+    body: str = ""
+    view_count: int = 0
     published_at: datetime
     average_rating: float
     comment_count: int
     score: float
 
 
+class JournalPage(BaseModel):
+    template: Literal["feature", "columns", "interview", "briefs", "poster"]
+    publication_ids: list[UUID] = Field(min_length=1, max_length=4)
+    heading: str = Field(default="", max_length=240)
+    text: str = Field(default="", max_length=20000)
+    image_url: str = Field(default="", max_length=2000, pattern=r"^(https://[^\s]+|/[^/][^\s]*|)$")
+    accent: str = Field(default="#c5ef58", pattern=r"^#[0-9a-fA-F]{6}$")
+
+
 class JournalIssueCreate(BaseModel):
     title: str = Field(min_length=5, max_length=240)
+    pages: list[JournalPage] = Field(default_factory=list, max_length=100)
     period_start: AwareDatetime
     period_end: AwareDatetime
 
