@@ -89,6 +89,8 @@ class PublicationLocalization(Base):
     title: Mapped[str] = mapped_column(String(240))
     summary: Mapped[str] = mapped_column(String(500))
     body: Mapped[str] = mapped_column(Text)
+    media_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    media_value: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     origin: Mapped[str] = mapped_column(String(20), server_default="original")
     translation_status: Mapped[str] = mapped_column(String(20), server_default="ready")
     source_revision: Mapped[int] = mapped_column(default=1)
