@@ -158,8 +158,9 @@ async def list_issue_publications(
 
 
 def can_manage_issue(issue: JournalIssue, user: User) -> bool:
-    roles = {role.code for role in user.roles}
-    return bool({RoleCode.EDITOR.value, RoleCode.ADMINISTRATOR.value}.intersection(roles))
+    return issue.editor_id == user.id or RoleCode.ADMINISTRATOR.value in {
+        role.code for role in user.roles
+    }
 
 
 @router.post("/images", status_code=status.HTTP_201_CREATED)
@@ -348,7 +349,7 @@ async def list_drafts(
             .order_by(JournalIssue.created_at.desc())
         )
     ).all()
-    return [to_issue(issue) for issue in issues]
+    return [to_issue(issue) for issue in issues if can_manage_issue(issue, user)]
 
 
 @router.put("/issues/{issue_id}", response_model=JournalIssueRead)

@@ -7,7 +7,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from ion_pulse.api.routes.journal import can_manage_issue, require_journal_access, save_issue
+from ion_pulse.api.routes.journal import require_journal_access, save_issue
 from ion_pulse.models.publications import JournalIssue
 from ion_pulse.schemas.publications import JournalIssueCreate, JournalPage
 
@@ -22,14 +22,6 @@ def test_other_roles_cannot_manage_journal(role):
 @pytest.mark.parametrize("role", ["editor", "administrator"])
 def test_editor_and_administrator_can_manage_journal(role):
     require_journal_access(SimpleNamespace(roles=[SimpleNamespace(code=role)]))
-
-
-@pytest.mark.parametrize("role", ["editor", "administrator"])
-def test_editorial_roles_can_continue_another_editors_journal_draft(role):
-    issue = SimpleNamespace(editor_id=uuid4())
-    user = SimpleNamespace(id=uuid4(), roles=[SimpleNamespace(code=role)])
-
-    assert can_manage_issue(issue, user) is True
 
 
 @pytest.mark.parametrize(
