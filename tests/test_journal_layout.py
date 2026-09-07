@@ -40,6 +40,22 @@ def test_layout_rejects_invalid_content(changes):
         JournalPage(**payload)
 
 
+def test_cover_supports_free_layout_without_publication() -> None:
+    page = JournalPage(
+        template="cover",
+        heading="Главные истории месяца",
+        text="Специальный выпуск",
+        image_url="https://example.com/cover.jpg",
+        image_position="background",
+        text_x=12,
+        text_y=64,
+        text_size=54,
+    )
+
+    assert page.publication_ids == []
+    assert page.image_position == "background"
+
+
 @pytest.mark.asyncio
 async def test_save_rejects_article_outside_month_without_writing():
     editor_id = uuid4()

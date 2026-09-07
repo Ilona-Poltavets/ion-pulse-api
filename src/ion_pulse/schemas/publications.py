@@ -132,12 +132,26 @@ class JournalCandidateRead(DigestItemRead):
 
 
 class JournalPage(BaseModel):
-    template: Literal["feature", "columns", "interview", "briefs", "poster"]
-    publication_ids: list[UUID] = Field(min_length=1, max_length=4)
+    template: Literal["cover", "feature", "columns", "interview", "briefs", "poster"]
+    publication_ids: list[UUID] = Field(default_factory=list, max_length=4)
     heading: str = Field(default="", max_length=240)
     text: str = Field(default="", max_length=20000)
     image_url: str = Field(default="", max_length=2000, pattern=r"^(https://[^\s]+|/[^/][^\s]*|)$")
     accent: str = Field(default="#c5ef58", pattern=r"^#[0-9a-fA-F]{6}$")
+    image_width: int = Field(default=100, ge=20, le=100)
+    image_height: int = Field(default=38, ge=15, le=100)
+    image_position: Literal["full", "left", "right", "background"] = "full"
+    text_x: int = Field(default=8, ge=0, le=80)
+    text_y: int = Field(default=58, ge=0, le=85)
+    text_width: int = Field(default=84, ge=20, le=100)
+    text_size: int = Field(default=38, ge=12, le=96)
+    continuation: bool = False
+
+    @model_validator(mode="after")
+    def require_material_for_content_page(self) -> "JournalPage":
+        if self.template != "cover" and not self.publication_ids:
+            raise ValueError("Journal content pages require at least one publication")
+        return self
 
 
 class JournalIssueCreate(BaseModel):
