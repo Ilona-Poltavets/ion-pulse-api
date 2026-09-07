@@ -158,6 +158,7 @@ class JournalPage(BaseModel):
     text_width: int = Field(default=84, ge=20, le=100)
     text_size: int = Field(default=38, ge=12, le=96)
     continuation: bool = False
+    one_post_per_page: bool = False
 
     @model_validator(mode="after")
     def require_material_for_content_page(self) -> "JournalPage":

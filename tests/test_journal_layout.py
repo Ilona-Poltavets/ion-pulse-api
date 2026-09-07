@@ -54,6 +54,7 @@ def test_cover_supports_free_layout_without_publication() -> None:
 
     assert page.publication_ids == []
     assert page.image_position == "background"
+    assert page.one_post_per_page is False
 
 
 @pytest.mark.parametrize("template", ["title", "finale"])
