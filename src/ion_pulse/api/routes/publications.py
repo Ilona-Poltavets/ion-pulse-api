@@ -512,10 +512,9 @@ async def list_my_publications(
     user: Annotated[User, Depends(get_current_user)],
 ) -> list[DraftRead]:
     rows = await session.execute(
-        select(Publication, PublicationLocalization, Category, User)
+        select(Publication, PublicationLocalization, Category)
         .join(PublicationLocalization, PublicationLocalization.publication_id == Publication.id)
         .join(Category, Category.id == Publication.category_id)
-        .join(User, User.id == Publication.author_id)
         .where(
             Publication.author_id == user.id,
             PublicationLocalization.locale == Publication.source_locale,
