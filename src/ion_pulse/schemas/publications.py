@@ -148,7 +148,7 @@ class JournalPage(BaseModel):
     publication_ids: list[UUID] = Field(default_factory=list, max_length=12)
     heading: str = Field(default="", max_length=240)
     text: str = Field(default="", max_length=20000)
-    image_url: str = Field(default="", max_length=2000, pattern=r"^(https://[^\s]+|/[^/][^\s]*|)$")
+    image_url: str = Field(default="", max_length=2000, pattern=r"^(https?://[^\s]+|/[^/][^\s]*|)$")
     accent: str = Field(default="#c5ef58", pattern=r"^#[0-9a-fA-F]{6}$")
     image_width: int = Field(default=100, ge=20, le=100)
     image_height: int = Field(default=38, ge=15, le=100)

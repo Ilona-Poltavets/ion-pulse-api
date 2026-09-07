@@ -197,7 +197,7 @@ async def list_journal_candidates(
         .group_by(PublicationComment.publication_id)
         .subquery()
     )
-    rows = await session.execute(
+    candidate_query = (
         select(
             Publication,
             Category,
@@ -222,8 +222,6 @@ async def list_journal_candidates(
         .outerjoin(comments, comments.c.publication_id == Publication.id)
         .where(
             Publication.status == PublicationStatus.PUBLISHED.value,
-            Publication.published_at >= week_start,
-            Publication.published_at < week_end,
             Publication.content_type != "digest",
         )
         .order_by(
@@ -233,6 +231,15 @@ async def list_journal_candidates(
             ).desc()
         )
     )
+    rows = await session.execute(
+        candidate_query.where(
+            Publication.published_at >= week_start,
+            Publication.published_at < week_end,
+        )
+    )
+    row_items = rows.all()
+    if month and not row_items:
+        row_items = (await session.execute(candidate_query.limit(50))).all()
     return [
         JournalCandidateRead(
             id=publication.id,
@@ -248,7 +255,7 @@ async def list_journal_candidates(
             + int(comment_count or 0) * 2
             + publication.view_count * 0.01,
         )
-        for publication, category, original, localized, average_rating, comment_count in rows
+        for publication, category, original, localized, average_rating, comment_count in row_items
         if publication.published_at is not None
     ]
 

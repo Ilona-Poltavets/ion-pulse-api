@@ -4,6 +4,7 @@ from html import escape
 
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from ion_pulse.api.router import api_router
@@ -35,6 +36,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     application.include_router(api_router, prefix=settings.api_v1_prefix)
+    application.mount(
+        "/uploads",
+        StaticFiles(directory=settings.upload_directory, check_dir=False),
+        name="uploads",
+    )
 
     @application.get("/sitemap.xml", include_in_schema=False)
     async def sitemap() -> Response:

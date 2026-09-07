@@ -1,14 +1,17 @@
+import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from ion_pulse.api.routes.auth import get_current_user
+from ion_pulse.core.config import get_settings
 from ion_pulse.db.session import get_db_session
 from ion_pulse.domain.publications import PublicationStatus
 from ion_pulse.domain.roles import RoleCode
@@ -30,6 +33,19 @@ from ion_pulse.schemas.publications import (
 )
 
 router = APIRouter(prefix="/journal")
+
+IMAGE_SIGNATURES = {
+    "image/jpeg": lambda data: data.startswith(b"\xff\xd8\xff"),
+    "image/png": lambda data: data.startswith(b"\x89PNG\r\n\x1a\n"),
+    "image/gif": lambda data: data.startswith((b"GIF87a", b"GIF89a")),
+    "image/webp": lambda data: data.startswith(b"RIFF") and data[8:12] == b"WEBP",
+}
+IMAGE_EXTENSIONS = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+}
 
 
 def require_journal_access(user: User) -> None:
@@ -145,6 +161,34 @@ def can_manage_issue(issue: JournalIssue, user: User) -> bool:
     return issue.editor_id == user.id or RoleCode.ADMINISTRATOR.value in {
         role.code for role in user.roles
     }
+
+
+@router.post("/images", status_code=status.HTTP_201_CREATED)
+async def upload_journal_image(
+    request: Request,
+    image: Annotated[UploadFile, File()],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict[str, str]:
+    require_journal_access(user)
+    content_type = image.content_type or ""
+    validator = IMAGE_SIGNATURES.get(content_type)
+    if validator is None:
+        raise HTTPException(status_code=415, detail="Use a JPEG, PNG, WebP, or GIF image")
+    content = await image.read(8 * 1024 * 1024 + 1)
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image must be no larger than 8 MB")
+    if not validator(content):
+        raise HTTPException(status_code=422, detail="Invalid image file")
+    relative_path = Path("journal") / f"{uuid4().hex}{IMAGE_EXTENSIONS[content_type]}"
+    target = Path(get_settings().upload_directory) / relative_path
+
+    def write_image() -> None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+
+    await asyncio.to_thread(write_image)
+    image_url = str(request.base_url).rstrip("/") + "/uploads/" + relative_path.as_posix()
+    return {"image_url": image_url}
 
 
 @router.post("/issues", response_model=JournalIssueRead, status_code=status.HTTP_201_CREATED)
@@ -322,18 +366,11 @@ async def save_issue(
     ids = list(dict.fromkeys(item for page in payload.pages for item in page.publication_ids))
     found = (
         await session.scalars(
-            select(Publication.id).where(
-                Publication.id.in_(ids),
-                Publication.status == "published",
-                Publication.published_at >= payload.period_start,
-                Publication.published_at < payload.period_end,
-            )
+            select(Publication.id).where(Publication.id.in_(ids), Publication.status == "published")
         )
     ).all()
     if set(found) != set(ids):
-        raise HTTPException(
-            status_code=422, detail="Select published articles from the issue month"
-        )
+        raise HTTPException(status_code=422, detail="Select published articles")
     issue.title = payload.title
     issue.period_start = payload.period_start
     issue.period_end = payload.period_end
